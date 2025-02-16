@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>160225</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: left; 
+            width: 1272px;
+            height: 594px;
+        }
+        canvas { display: block; }
+        #keyboard {
+            position: absolute;
+            padding: 20px;
+            z-index: 10;
+            display: flex;
+            width: 96.9%;
+            height: 93%;
+        }
+        #keyboardInput {
+            color: white;
+            background-color: transparent;
+            border: none;
+            width: 100%;
+            font-size: 18px;
+            outline: none;
+            resize: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="keyboard">
+        <textarea type="text" id="keyboardInput" placeholder="Digite uma palavra..."></textarea>
+    </div>
+
+    <script type="module">
+        import * as THREE from "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js";
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        let wordsGroup = new THREE.Group();
+        scene.add(wordsGroup);
+
+        function hashStringToNumber(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = (hash << 5) - hash + str.charCodeAt(i);
+                hash = hash & hash;
+            }
+            return Math.abs(hash);
+        }
+
+        function generateShapesFromWords(inputText) {
+            scene.remove(wordsGroup);
+            wordsGroup = new THREE.Group();
+            scene.add(wordsGroup);
+
+            const words = inputText.split(" ").filter(w => w.length > 0);
+            const columns = Math.ceil(Math.sqrt(words.length));
+            const spacing = 8;
+
+            let minX = Infinity, maxX = -Infinity;
+            let minY = Infinity, maxY = -Infinity;
+
+            words.forEach((word, index) => {
+                const wordGroup = new THREE.Group();
+                const baseSeed = hashStringToNumber(word);
+
+                for (let i = 0; i < word.length; i++) {
+                    const charSeed = (baseSeed + i * 17) % 1000;
+                    const geometry = new THREE.BufferGeometry();
+                    const vertexCount = 6 + (charSeed % 10);
+                    const vertices = [];
+
+                    for (let j = 0; j < vertexCount; j++) {
+                        const x = Math.sin(charSeed + j) * 1.2;
+                        const y = Math.cos(charSeed + j * 1.5) * 1.2;
+                        const z = (Math.sin(j * 2 + charSeed) - Math.cos(j * 2)) * 1.2;
+                        vertices.push(x, y, z);
+                    }
+
+                    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+
+                    const indices = [];
+                    for (let j = 1; j < vertexCount - 1; j++) {
+                        indices.push(0, j, j + 1);
+                    }
+                    geometry.setIndex(indices);
+                    geometry.computeVertexNormals();
+
+                    const hue = (baseSeed % 360);
+                    const saturation = 70 + (charSeed % 30);
+                    const lightness = 40 + (charSeed % 20);
+                    const color = new THREE.Color(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
+
+                    const material = new THREE.MeshStandardMaterial({ color, flatShading: true });
+
+                    const mesh = new THREE.Mesh(geometry, material);
+                    mesh.position.x = (i - word.length / 2) * 1.6;
+                    mesh.position.y = Math.sin(i + baseSeed) * 2;
+                    wordGroup.add(mesh);
+                }
+
+                const row = Math.floor(index / columns);
+                const col = index % columns;
+                wordGroup.position.set(col * spacing, -row * spacing, 0);
+                wordsGroup.add(wordGroup);
+
+                minX = Math.min(minX, wordGroup.position.x);
+                maxX = Math.max(maxX, wordGroup.position.x);
+                minY = Math.min(minY, wordGroup.position.y);
+                maxY = Math.max(maxY, wordGroup.position.y);
+            });
+
+            const centerX = (minX + maxX) / 2;
+            const centerY = (minY + maxY) / 2;
+            wordsGroup.position.set(-centerX, -centerY, 0);
+
+            adjustCameraPosition(columns, Math.ceil(words.length / columns), spacing);
+        }
+
+        function adjustCameraPosition(columns, rows, spacing) {
+            const totalWidth = columns * spacing;
+            const totalHeight = rows * spacing;
+
+            camera.position.set(0, 0, Math.max(totalWidth, totalHeight) * 1.2);
+            camera.lookAt(0, 0, 0);
+        }
+
+        const light = new THREE.PointLight(0xffffff, 1, 100);
+        light.position.set(5, 5, 5);
+        scene.add(light);
+
+        document.getElementById("keyboardInput").addEventListener("input", () => {
+            const keyboardInput = document.getElementById("keyboardInput").value.trim();
+            if (keyboardInput.length > 0) {
+                generateShapesFromWords(keyboardInput);
+            }
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+        });
+
+    </script>
+</body>
+</html>
